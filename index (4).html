@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Player</title>
+
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<meta name="theme-color" content="#0e0d0c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Player">
+<style>
+  :root{
+    --bg: #0e0d0c;
+    --bg-raised: #181614;
+    --bg-row-hover: #221f1c;
+    --line: #2a2723;
+    --text: #f3efe8;
+    --text-dim: #948c82;
+    --accent: #e8893a;
+    --accent-dim: #8a4f23;
+    --danger: #c4523a;
+  }
+
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body{
+    margin:0; padding:0; height:100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .app{
+    display:flex;
+    flex-direction:column;
+    height:100vh;
+    width:100vw;
+  }
+
+  /* ---------- TOP BAR ---------- */
+  .topbar{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    padding: 22px 28px 14px;
+    flex-shrink:0;
+  }
+  .brand{
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .brand .dot{ color: var(--accent); }
+  .repo-tag{
+    font-size: 13px;
+    color: var(--text-dim);
+    font-family: 'SF Mono', Consolas, monospace;
+  }
+
+  /* ---------- LIST ---------- */
+  .list-wrap{
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 14px 14px;
+  }
+  .list-wrap::-webkit-scrollbar{ width: 0; }
+
+  .state-msg{
+    padding: 60px 28px;
+    text-align:center;
+    color: var(--text-dim);
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  .state-msg .big{
+    font-size: 40px;
+    margin-bottom: 8px;
+  }
+  .state-msg code{
+    color: var(--accent);
+    font-family: 'SF Mono', Consolas, monospace;
+    background: var(--bg-raised);
+    padding: 2px 8px;
+    border-radius: 6px;
+  }
+  .retry-btn{
+    margin-top: 18px;
+    background: var(--accent);
+    color: #1a1006;
+    border:none;
+    font-weight:700;
+    font-size:15px;
+    padding: 12px 22px;
+    border-radius: 10px;
+  }
+
+  .track-row{
+    display:flex;
+    align-items:center;
+    gap:16px;
+    padding: 16px 14px;
+    border-radius: 14px;
+    margin-bottom: 4px;
+    transition: background 0.15s ease;
+  }
+  .track-row:active{ background: var(--bg-row-hover); }
+  .track-row.playing{ background: var(--bg-raised); }
+
+  .track-index{
+    width: 28px;
+    flex-shrink:0;
+    text-align:center;
+    font-size: 14px;
+    color: var(--text-dim);
+    font-family: 'SF Mono', Consolas, monospace;
+  }
+  .track-row.playing .track-index{ color: var(--accent); }
+
+  .eq{
+    width:28px; height:18px;
+    display:flex; align-items:flex-end; justify-content:center; gap:3px;
+    margin: 0 auto;
+  }
+  .eq span{
+    width:3px; background: var(--accent); border-radius:2px;
+    animation: eqbar 0.9s ease-in-out infinite;
+  }
+  .eq span:nth-child(1){ height:40%; animation-delay: -0.6s; }
+  .eq span:nth-child(2){ height:100%; animation-delay: -0.2s; }
+  .eq span:nth-child(3){ height:65%; animation-delay: -0.9s; }
+  @keyframes eqbar{
+    0%, 100% { transform: scaleY(0.4); }
+    50% { transform: scaleY(1); }
+  }
+
+  .track-info{
+    flex:1;
+    min-width:0;
+  }
+  .track-title{
+    font-size: 16px;
+    font-weight: 600;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .track-row.playing .track-title{ color: var(--accent); }
+  .track-sub{
+    font-size: 13px;
+    color: var(--text-dim);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    margin-top:2px;
+  }
+
+  /* ---------- PLAYER BAR ---------- */
+  .player{
+    flex-shrink:0;
+    background: var(--bg-raised);
+    border-top: 1px solid var(--line);
+    padding: 14px 22px 18px;
+  }
+
+  .progress-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom: 12px;
+  }
+  .time{
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'SF Mono', Consolas, monospace;
+    width: 38px;
+    flex-shrink:0;
+  }
+  .time.right{ text-align:right; }
+
+  .progress-track{
+    flex:1;
+    height: 22px;
+    display:flex;
+    align-items:center;
+    position:relative;
+  }
+  .progress-bg{
+    width:100%;
+    height: 6px;
+    background: var(--line);
+    border-radius: 3px;
+    position:relative;
+    overflow:hidden;
+  }
+  .progress-fill{
+    position:absolute;
+    left:0; top:0; bottom:0;
+    width:0%;
+    background: var(--accent);
+    border-radius: 3px;
+  }
+  .progress-input{
+    position:absolute;
+    inset:0;
+    width:100%;
+    margin:0;
+    opacity:0;
+    cursor:pointer;
+  }
+
+  .controls-row{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .now-playing{
+    flex:1;
+    min-width:0;
+  }
+  .now-title{
+    font-size: 15px;
+    font-weight: 700;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .now-sub{
+    font-size: 12px;
+    color: var(--text-dim);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+
+  .transport{
+    display:flex;
+    align-items:center;
+    gap: 6px;
+    flex-shrink:0;
+  }
+  .ctrl-btn{
+    background:none;
+    border:none;
+    color: var(--text);
+    width: 44px; height:44px;
+    border-radius: 50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+  }
+  .ctrl-btn:active{ background: var(--bg-row-hover); }
+  .ctrl-btn svg{ width:22px; height:22px; }
+
+  .play-btn{
+    width: 56px; height:56px;
+    background: var(--accent);
+  }
+  .play-btn:active{ background: var(--accent-dim); }
+  .play-btn svg{ width:24px; height:24px; fill: #1a1006; }
+
+  .vol-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-shrink:0;
+    width: 110px;
+  }
+  .vol-row svg{ width:18px; height:18px; flex-shrink:0; color: var(--text-dim); }
+  .vol-input{
+    flex:1;
+    height: 4px;
+    -webkit-appearance:none;
+    background: var(--line);
+    border-radius:2px;
+    outline:none;
+  }
+  .vol-input::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:14px; height:14px;
+    border-radius:50%;
+    background: var(--accent);
+  }
+
+  @media (max-width: 480px){
+    .vol-row{ display:none; }
+    .topbar{ padding: 16px 18px 10px; }
+    .player{ padding: 12px 16px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="topbar">
+    <div class="brand">player<span class="dot">.</span></div>
+    <div class="repo-tag" id="repoTag">carregando…</div>
+  </div>
+
+  <div class="list-wrap" id="listWrap">
+    <div class="state-msg">
+      <div class="big">♪</div>
+      Carregando músicas do repositório…
+    </div>
+  </div>
+
+  <div class="player">
+    <div class="progress-row">
+      <div class="time" id="curTime">0:00</div>
+      <div class="progress-track">
+        <div class="progress-bg">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <input type="range" class="progress-input" id="seekInput" min="0" max="100" value="0" step="0.1">
+      </div>
+      <div class="time right" id="durTime">0:00</div>
+    </div>
+
+    <div class="controls-row">
+      <div class="now-playing">
+        <div class="now-title" id="nowTitle">Nenhuma faixa</div>
+        <div class="now-sub" id="nowSub">Selecione uma música</div>
+      </div>
+
+      <div class="transport">
+        <button class="ctrl-btn" id="prevBtn" aria-label="Anterior">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+        </button>
+        <button class="ctrl-btn play-btn" id="playBtn" aria-label="Tocar">
+          <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="ctrl-btn" id="nextBtn" aria-label="Próxima">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zm-2 6L5.5 6v12z"/></svg>
+        </button>
+      </div>
+
+      <div class="vol-row">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.06c1.48-.74 2.5-2.26 2.5-4.03z"/></svg>
+        <input type="range" class="vol-input" id="volInput" min="0" max="100" value="80">
+      </div>
+    </div>
+  </div>
+</div>
+
+<audio id="audioEl" preload="metadata"></audio>
+
+<script>
+/* ====== CONFIGURAÇÃO — troque pelos dados do seu repositório ====== */
+const GITHUB_USER = "gilbertoppcp-arch";
+const GITHUB_REPO = "Junior-Player-";
+const GITHUB_BRANCH = "main";
+const MUSIC_FOLDERS = ["musica1", "musica2"];
+/* =================================================================== */
+
+const AUDIO_EXTENSIONS = ['.mp3', '.m4a', '.ogg', '.wav', '.flac', '.aac'];
+
+const listWrap = document.getElementById('listWrap');
+const repoTag = document.getElementById('repoTag');
+const audioEl = document.getElementById('audioEl');
+const playBtn = document.getElementById('playBtn');
+const playIcon = document.getElementById('playIcon');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const seekInput = document.getElementById('seekInput');
+const progressFill = document.getElementById('progressFill');
+const curTimeEl = document.getElementById('curTime');
+const durTimeEl = document.getElementById('durTime');
+const nowTitle = document.getElementById('nowTitle');
+const nowSub = document.getElementById('nowSub');
+const volInput = document.getElementById('volInput');
+
+let tracks = [];
+let currentIndex = -1;
+let isSeeking = false;
+
+const ICON_PLAY = '<path d="M8 5v14l11-7z"/>';
+const ICON_PAUSE = '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>';
+
+repoTag.textContent = `${GITHUB_USER}/${GITHUB_REPO}`;
+
+function parseFileName(filename) {
+  let name = filename.replace(/\.[^/.]+$/, "");
+
+  // remove domínios/URLs tipo "www.site.com.br" que vieram coladas no nome
+  name = name.replace(/www\.[a-z0-9.-]+\.[a-z]{2,}/gi, "");
+
+  // se houver um padrão "lixo--NomeReal", pega só a parte depois do último "--"
+  if (name.includes("--")) {
+    const parts = name.split("--");
+    name = parts[parts.length - 1];
+  }
+
+  // separa artista/título pelo padrão " - " antes de tocar nos hífens internos
+  let artist = "", title = name;
+  const sepParts = name.split(" - ").map(p => p.trim()).filter(Boolean);
+  if (sepParts.length >= 2) {
+    artist = sepParts[0];
+    title = sepParts.slice(1).join(" - ");
+  }
+
+  // só agora limpa hífens/underscores remanescentes (de slugs) e espaços duplicados
+  artist = artist.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+  title = title.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+
+  return { artist, title };
+}
+
+function formatTime(seconds) {
+  if (!isFinite(seconds) || seconds < 0) return "0:00";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+async function fetchFolder(folder) {
+  const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${folder}?ref=${GITHUB_BRANCH}`;
+  const res = await fetch(apiUrl);
+  if (!res.ok) {
+    return { folder, error: res.status, files: [] };
+  }
+  const data = await res.json();
+  return { folder, error: null, files: Array.isArray(data) ? data : [] };
+}
+
+async function loadTracks() {
+  try {
+    const results = await Promise.all(MUSIC_FOLDERS.map(fetchFolder));
+
+    const hardErrors = results.filter(r => r.error && r.error !== 404);
+    if (hardErrors.length === results.length) {
+      const status = hardErrors[0].error;
+      if (status === 403) {
+        showState(`Limite de requisições da API do GitHub atingido.<br>Aguarde um pouco e tente de novo.`, true);
+      } else {
+        showState(`Erro ao acessar o repositório (${status}).<br>Confira <code>GITHUB_USER</code> e <code>GITHUB_REPO</code> no código.`, true);
+      }
+      return;
+    }
+
+    const allFiles = [];
+    results.forEach(r => {
+      r.files.forEach(f => allFiles.push(f));
+    });
+
+    tracks = allFiles
+      .filter(f => f.type === "file" && AUDIO_EXTENSIONS.some(ext => f.name.toLowerCase().endsWith(ext)))
+      .map(f => {
+        const meta = parseFileName(f.name);
+        return {
+          name: f.name,
+          url: f.download_url,
+          title: meta.title,
+          artist: meta.artist
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+
+    if (tracks.length === 0) {
+      showState(`Nenhum arquivo de música encontrado em <code>${MUSIC_FOLDERS.join(", ")}</code>.<br>Formatos aceitos: ${AUDIO_EXTENSIONS.join(", ")}`, false);
+      return;
+    }
+    renderList();
+  } catch (err) {
+    showState(`Não foi possível conectar ao GitHub.<br>Verifique a conexão com a internet.`, true);
+  }
+}
+
+function showState(html, withRetry) {
+  listWrap.innerHTML = `
+    <div class="state-msg">
+      <div class="big">${withRetry ? '⚠' : '♪'}</div>
+      ${html}
+      ${withRetry ? '<div><button class="retry-btn" onclick="loadTracks()">Tentar de novo</button></div>' : ''}
+    </div>`;
+}
+
+function renderList() {
+  listWrap.innerHTML = "";
+  tracks.forEach((track, i) => {
+    const row = document.createElement('div');
+    row.className = 'track-row';
+    row.dataset.index = i;
+    row.innerHTML = `
+      <div class="track-index">${(i + 1).toString().padStart(2, '0')}</div>
+      <div class="track-info">
+        <div class="track-title">${escapeHtml(track.title)}</div>
+        <div class="track-sub">${escapeHtml(track.artist) || '&nbsp;'}</div>
+      </div>
+    `;
+    row.addEventListener('click', () => playTrack(i));
+    listWrap.appendChild(row);
+  });
+  updateActiveRow();
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str || "";
+  return div.innerHTML;
+}
+
+function updateActiveRow() {
+  document.querySelectorAll('.track-row').forEach(row => {
+    const idx = parseInt(row.dataset.index);
+    row.classList.toggle('playing', idx === currentIndex);
+    const indexCell = row.querySelector('.track-index');
+    if (idx === currentIndex && !audioEl.paused) {
+      indexCell.innerHTML = '<div class="eq"><span></span><span></span><span></span></div>';
+    } else {
+      indexCell.textContent = (idx + 1).toString().padStart(2, '0');
+    }
+  });
+}
+
+function playTrack(index) {
+  if (index < 0 || index >= tracks.length) return;
+  currentIndex = index;
+  const track = tracks[index];
+  audioEl.src = track.url;
+  audioEl.play().catch(() => {});
+  nowTitle.textContent = track.title;
+  nowSub.textContent = track.artist || track.name;
+  updateActiveRow();
+}
+
+function togglePlay() {
+  if (currentIndex === -1) {
+    if (tracks.length > 0) playTrack(0);
+    return;
+  }
+  if (audioEl.paused) {
+    audioEl.play().catch(() => {});
+  } else {
+    audioEl.pause();
+  }
+}
+
+audioEl.addEventListener('play', () => {
+  playIcon.innerHTML = ICON_PAUSE;
+  updateActiveRow();
+});
+audioEl.addEventListener('pause', () => {
+  playIcon.innerHTML = ICON_PLAY;
+  updateActiveRow();
+});
+audioEl.addEventListener('ended', () => playNext());
+
+audioEl.addEventListener('loadedmetadata', () => {
+  durTimeEl.textContent = formatTime(audioEl.duration);
+});
+
+audioEl.addEventListener('timeupdate', () => {
+  if (isSeeking) return;
+  curTimeEl.textContent = formatTime(audioEl.currentTime);
+  const pct = audioEl.duration ? (audioEl.currentTime / audioEl.duration) * 100 : 0;
+  progressFill.style.width = pct + "%";
+  seekInput.value = pct;
+});
+
+seekInput.addEventListener('input', () => {
+  isSeeking = true;
+  const pct = parseFloat(seekInput.value);
+  progressFill.style.width = pct + "%";
+  if (audioEl.duration) {
+    curTimeEl.textContent = formatTime((pct / 100) * audioEl.duration);
+  }
+});
+seekInput.addEventListener('change', () => {
+  if (audioEl.duration) {
+    audioEl.currentTime = (parseFloat(seekInput.value) / 100) * audioEl.duration;
+  }
+  isSeeking = false;
+});
+
+function playNext() {
+  if (tracks.length === 0) return;
+  playTrack((currentIndex + 1) % tracks.length);
+}
+function playPrev() {
+  if (tracks.length === 0) return;
+  playTrack((currentIndex - 1 + tracks.length) % tracks.length);
+}
+
+playBtn.addEventListener('click', togglePlay);
+nextBtn.addEventListener('click', playNext);
+prevBtn.addEventListener('click', playPrev);
+
+volInput.addEventListener('input', () => {
+  audioEl.volume = volInput.value / 100;
+});
+audioEl.volume = 0.8;
+
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  if (e.code === 'ArrowRight') playNext();
+  if (e.code === 'ArrowLeft') playPrev();
+});
+
+loadTracks();
+</script>
+
+</body>
+</html>
