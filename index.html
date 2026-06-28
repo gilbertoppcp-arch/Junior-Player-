@@ -261,6 +261,15 @@
   .ctrl-btn:active{ background: var(--bg-row-hover); }
   .ctrl-btn svg{ width:22px; height:22px; }
 
+  .shuffle-btn{
+    color: var(--text-dim);
+  }
+  .shuffle-btn.active{
+    color: var(--accent);
+    background: var(--bg-row-hover);
+  }
+  .shuffle-btn svg{ width:19px; height:19px; }
+
   .play-btn{
     width: 56px; height:56px;
     background: var(--accent);
@@ -332,6 +341,9 @@
       </div>
 
       <div class="transport">
+        <button class="ctrl-btn shuffle-btn" id="shuffleBtn" aria-label="Aleatório">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+        </button>
         <button class="ctrl-btn" id="prevBtn" aria-label="Anterior">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
         </button>
@@ -377,10 +389,13 @@ const durTimeEl = document.getElementById('durTime');
 const nowTitle = document.getElementById('nowTitle');
 const nowSub = document.getElementById('nowSub');
 const volInput = document.getElementById('volInput');
+const shuffleBtn = document.getElementById('shuffleBtn');
 
 let tracks = [];
 let currentIndex = -1;
 let isSeeking = false;
+let isShuffle = false;
+let shuffleOrder = [];
 
 const ICON_PLAY = '<path d="M8 5v14l11-7z"/>';
 const ICON_PAUSE = '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>';
@@ -581,14 +596,60 @@ seekInput.addEventListener('change', () => {
   isSeeking = false;
 });
 
+function shuffleArray(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function rebuildShuffleOrder(keepCurrentFirst) {
+  const indices = tracks.map((_, i) => i);
+  shuffleOrder = shuffleArray(indices);
+  if (keepCurrentFirst && currentIndex !== -1) {
+    const pos = shuffleOrder.indexOf(currentIndex);
+    if (pos > -1) {
+      shuffleOrder.splice(pos, 1);
+      shuffleOrder.unshift(currentIndex);
+    }
+  }
+}
+
+function toggleShuffle() {
+  isShuffle = !isShuffle;
+  shuffleBtn.classList.toggle('active', isShuffle);
+  if (isShuffle) {
+    rebuildShuffleOrder(true);
+  }
+}
+
 function playNext() {
   if (tracks.length === 0) return;
-  playTrack((currentIndex + 1) % tracks.length);
+  if (isShuffle) {
+    if (shuffleOrder.length === 0) rebuildShuffleOrder(false);
+    const pos = shuffleOrder.indexOf(currentIndex);
+    const nextPos = (pos + 1) % shuffleOrder.length;
+    if (nextPos === 0) rebuildShuffleOrder(false);
+    playTrack(shuffleOrder[(pos + 1) % shuffleOrder.length]);
+  } else {
+    playTrack((currentIndex + 1) % tracks.length);
+  }
 }
 function playPrev() {
   if (tracks.length === 0) return;
-  playTrack((currentIndex - 1 + tracks.length) % tracks.length);
+  if (isShuffle) {
+    if (shuffleOrder.length === 0) rebuildShuffleOrder(false);
+    const pos = shuffleOrder.indexOf(currentIndex);
+    const prevPos = (pos - 1 + shuffleOrder.length) % shuffleOrder.length;
+    playTrack(shuffleOrder[prevPos]);
+  } else {
+    playTrack((currentIndex - 1 + tracks.length) % tracks.length);
+  }
 }
+
+shuffleBtn.addEventListener('click', toggleShuffle);
 
 playBtn.addEventListener('click', togglePlay);
 nextBtn.addEventListener('click', playNext);
