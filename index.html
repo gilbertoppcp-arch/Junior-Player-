@@ -58,10 +58,68 @@
     letter-spacing: -0.5px;
   }
   .brand .dot{ color: var(--accent); }
+
+  .topbar-right{
+    display:flex;
+    align-items:center;
+    gap: 14px;
+  }
+
+  .download-btn{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 9px 14px;
+    border-radius: 10px;
+    flex-shrink:0;
+  }
+  .download-btn:active{ background: var(--bg-row-hover); }
+  .download-btn svg{ width:16px; height:16px; flex-shrink:0; }
+  .download-btn.done{ color: var(--accent); border-color: var(--accent-dim); }
+  .download-btn.downloading{ color: var(--text-dim); }
+  .download-btn:disabled{ opacity: 0.6; }
+
   .repo-tag{
     font-size: 13px;
     color: var(--text-dim);
     font-family: 'SF Mono', Consolas, monospace;
+  }
+
+  .dl-progress-wrap{
+    flex-shrink:0;
+    margin: 0 28px 10px;
+  }
+  .dl-progress-bar{
+    height: 3px;
+    background: var(--line);
+    position:relative;
+    border-radius: 2px;
+    overflow:hidden;
+  }
+  .dl-progress-fill{
+    position:absolute;
+    left:0; top:0; bottom:0;
+    width:0%;
+    background: var(--accent);
+    transition: width 0.2s ease;
+  }
+  .dl-progress-text{
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 5px;
+    font-family: 'SF Mono', Consolas, monospace;
+  }
+
+  .track-offline-icon{
+    width: 14px; height:14px;
+    color: var(--accent);
+    flex-shrink:0;
+    margin-left: 6px;
   }
 
   /* ---------- LIST ---------- */
@@ -225,6 +283,7 @@
   .now-playing{
     flex:1;
     min-width:0;
+    max-width: 38%;
   }
   .now-title{
     font-size: 15px;
@@ -252,6 +311,7 @@
     border:none;
     color: var(--text);
     width: 44px; height:44px;
+    min-width: 44px;
     border-radius: 50%;
     display:flex;
     align-items:center;
@@ -272,6 +332,7 @@
 
   .play-btn{
     width: 56px; height:56px;
+    min-width: 56px;
     background: var(--accent);
   }
   .play-btn:active{ background: var(--accent-dim); }
@@ -305,6 +366,26 @@
     .topbar{ padding: 16px 18px 10px; }
     .player{ padding: 12px 16px 16px; }
   }
+
+  /* Telas largas e baixas (multimídia 7" tipo 800x480 / 1024x600) */
+  @media (max-height: 520px){
+    .topbar{ padding: 10px 20px 6px; }
+    .brand{ font-size: 18px; }
+    .topbar-right{ gap: 10px; }
+    .download-btn{ padding: 7px 11px; font-size: 12px; }
+    .repo-tag{ display:none; }
+    .list-wrap{ padding: 0 10px 6px; }
+    .track-row{ padding: 8px 12px; margin-bottom: 2px; }
+    .track-title{ font-size: 14px; }
+    .track-sub{ font-size: 11px; }
+    .player{ padding: 8px 18px 10px; }
+    .progress-row{ margin-bottom: 6px; }
+    .ctrl-btn{ width: 38px; height:38px; min-width:38px; }
+    .play-btn{ width: 46px; height:46px; min-width:46px; }
+    .now-title{ font-size: 13px; }
+    .now-sub{ font-size: 11px; }
+    .vol-row{ display:none; }
+  }
 </style>
 </head>
 <body>
@@ -312,7 +393,20 @@
 <div class="app">
   <div class="topbar">
     <div class="brand">player<span class="dot">.</span></div>
-    <div class="repo-tag" id="repoTag">carregando…</div>
+    <div class="topbar-right">
+      <button class="download-btn" id="downloadAllBtn" aria-label="Baixar tudo">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
+        <span id="downloadBtnLabel">Baixar tudo</span>
+      </button>
+      <div class="repo-tag" id="repoTag">carregando…</div>
+    </div>
+  </div>
+
+  <div class="dl-progress-wrap" id="dlProgressWrap" style="display:none;">
+    <div class="dl-progress-bar">
+      <div class="dl-progress-fill" id="dlProgressFill"></div>
+    </div>
+    <div class="dl-progress-text" id="dlProgressText"></div>
   </div>
 
   <div class="list-wrap" id="listWrap">
@@ -390,6 +484,11 @@ const nowTitle = document.getElementById('nowTitle');
 const nowSub = document.getElementById('nowSub');
 const volInput = document.getElementById('volInput');
 const shuffleBtn = document.getElementById('shuffleBtn');
+const downloadAllBtn = document.getElementById('downloadAllBtn');
+const downloadBtnLabel = document.getElementById('downloadBtnLabel');
+const dlProgressWrap = document.getElementById('dlProgressWrap');
+const dlProgressFill = document.getElementById('dlProgressFill');
+const dlProgressText = document.getElementById('dlProgressText');
 
 let tracks = [];
 let currentIndex = -1;
@@ -510,11 +609,13 @@ function renderList() {
         <div class="track-title">${escapeHtml(track.title)}</div>
         <div class="track-sub">${escapeHtml(track.artist) || '&nbsp;'}</div>
       </div>
+      <svg class="track-offline-icon" data-offline-icon style="display:none;" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-1.5 14.5L6 12l1.41-1.41L10.5 13.67l6.09-6.09L18 9z"/></svg>
     `;
     row.addEventListener('click', () => playTrack(i));
     listWrap.appendChild(row);
   });
   updateActiveRow();
+  refreshOfflineIcons();
 }
 
 function escapeHtml(str) {
@@ -536,15 +637,27 @@ function updateActiveRow() {
   });
 }
 
-function playTrack(index) {
+async function playTrack(index) {
   if (index < 0 || index >= tracks.length) return;
   currentIndex = index;
   const track = tracks[index];
-  audioEl.src = track.url;
-  audioEl.play().catch(() => {});
+
   nowTitle.textContent = track.title;
   nowSub.textContent = track.artist || track.name;
   updateActiveRow();
+  updateMediaSessionMetadata(track);
+
+  const localBlob = await getOfflineBlob(track.name);
+  if (localBlob) {
+    if (audioEl.dataset.blobUrl) URL.revokeObjectURL(audioEl.dataset.blobUrl);
+    const blobUrl = URL.createObjectURL(localBlob);
+    audioEl.dataset.blobUrl = blobUrl;
+    audioEl.src = blobUrl;
+  } else {
+    audioEl.removeAttribute('data-blob-url');
+    audioEl.src = track.url;
+  }
+  audioEl.play().catch(() => {});
 }
 
 function togglePlay() {
@@ -562,10 +675,12 @@ function togglePlay() {
 audioEl.addEventListener('play', () => {
   playIcon.innerHTML = ICON_PAUSE;
   updateActiveRow();
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
 });
 audioEl.addEventListener('pause', () => {
   playIcon.innerHTML = ICON_PLAY;
   updateActiveRow();
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
 });
 audioEl.addEventListener('ended', () => playNext());
 
@@ -665,6 +780,179 @@ document.addEventListener('keydown', (e) => {
   if (e.code === 'ArrowRight') playNext();
   if (e.code === 'ArrowLeft') playPrev();
 });
+
+/* ====================== ARMAZENAMENTO OFFLINE (IndexedDB) ====================== */
+
+const DB_NAME = 'player-offline';
+const DB_VERSION = 1;
+const STORE_NAME = 'tracks';
+let dbInstance = null;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    if (dbInstance) return resolve(dbInstance);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'name' });
+      }
+    };
+    req.onsuccess = () => { dbInstance = req.result; resolve(dbInstance); };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function getOfflineBlob(trackName) {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.get(trackName);
+      req.onsuccess = () => resolve(req.result ? req.result.blob : null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function saveOfflineBlob(trackName, blob) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    store.put({ name: trackName, blob: blob });
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function getAllOfflineNames() {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.getAllKeys();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function refreshOfflineIcons() {
+  const savedNames = new Set(await getAllOfflineNames());
+  document.querySelectorAll('.track-row').forEach(row => {
+    const idx = parseInt(row.dataset.index);
+    const track = tracks[idx];
+    const icon = row.querySelector('[data-offline-icon]');
+    if (icon && track) {
+      icon.style.display = savedNames.has(track.name) ? 'block' : 'none';
+    }
+  });
+  updateDownloadButtonState(savedNames.size);
+}
+
+function updateDownloadButtonState(savedCount) {
+  if (tracks.length === 0) return;
+  if (savedCount >= tracks.length) {
+    downloadAllBtn.classList.add('done');
+    downloadBtnLabel.textContent = 'Tudo salvo offline';
+  } else if (savedCount > 0) {
+    downloadBtnLabel.textContent = `Baixar tudo (${savedCount}/${tracks.length})`;
+  } else {
+    downloadBtnLabel.textContent = 'Baixar tudo';
+  }
+}
+
+async function downloadAllTracks() {
+  if (tracks.length === 0) return;
+  downloadAllBtn.disabled = true;
+  downloadAllBtn.classList.add('downloading');
+  dlProgressWrap.style.display = 'block';
+
+  const savedNames = new Set(await getAllOfflineNames());
+  const pending = tracks.filter(t => !savedNames.has(t.name));
+  const total = pending.length;
+  let done = 0;
+
+  if (total === 0) {
+    dlProgressWrap.style.display = 'none';
+    downloadAllBtn.disabled = false;
+    downloadAllBtn.classList.remove('downloading');
+    refreshOfflineIcons();
+    return;
+  }
+
+  for (const track of pending) {
+    dlProgressText.textContent = `Baixando ${done + 1} de ${total}: ${track.title}`;
+    try {
+      const res = await fetch(track.url);
+      if (res.ok) {
+        const blob = await res.blob();
+        await saveOfflineBlob(track.name, blob);
+      }
+    } catch (err) {
+      console.error('Falha ao baixar', track.name, err);
+    }
+    done++;
+    const pct = (done / total) * 100;
+    dlProgressFill.style.width = pct + '%';
+    refreshOfflineIcons();
+  }
+
+  dlProgressText.textContent = `Concluído: ${done} de ${total} músicas baixadas.`;
+  downloadAllBtn.disabled = false;
+  downloadAllBtn.classList.remove('downloading');
+  setTimeout(() => { dlProgressWrap.style.display = 'none'; }, 3000);
+  refreshOfflineIcons();
+}
+
+downloadAllBtn.addEventListener('click', downloadAllTracks);
+
+/* ====================== MEDIA SESSION (reprodução em segundo plano) ====================== */
+
+function updateMediaSessionMetadata(track) {
+  if (!('mediaSession' in navigator)) return;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: track.title || track.name,
+    artist: track.artist || 'Player',
+    album: 'Player',
+    artwork: [
+      { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
+      { src: 'icon-512.png', sizes: '512x512', type: 'image/png' }
+    ]
+  });
+}
+
+function setupMediaSessionHandlers() {
+  if (!('mediaSession' in navigator)) return;
+  navigator.mediaSession.setActionHandler('play', () => {
+    audioEl.play().catch(() => {});
+  });
+  navigator.mediaSession.setActionHandler('pause', () => {
+    audioEl.pause();
+  });
+  navigator.mediaSession.setActionHandler('previoustrack', () => {
+    playPrev();
+  });
+  navigator.mediaSession.setActionHandler('nexttrack', () => {
+    playNext();
+  });
+  try {
+    navigator.mediaSession.setActionHandler('seekto', (details) => {
+      if (details.seekTime != null && audioEl.duration) {
+        audioEl.currentTime = details.seekTime;
+      }
+    });
+  } catch (e) { /* alguns navegadores não suportam seekto */ }
+}
+
+setupMediaSessionHandlers();
 
 loadTracks();
 </script>
